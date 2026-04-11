@@ -5,7 +5,7 @@ export const PALETTES = {
   original: {
     name: 'Original',
     description: 'Full color',
-    colors: null, // null means no quantization
+    colors: null,
     icon: '🎨',
   },
 
@@ -29,9 +29,7 @@ export const PALETTES = {
     name: 'Game Boy',
     description: '4 greens',
     icon: '🟢',
-    colors: [
-      [15,56,15],[48,98,48],[139,172,15],[155,188,15],
-    ],
+    colors: [[15,56,15],[48,98,48],[139,172,15],[155,188,15]],
   },
 
   snes: {
@@ -69,9 +67,7 @@ export const PALETTES = {
     name: '1-Bit',
     description: 'Black & white',
     icon: '⬛',
-    colors: [
-      [0,0,0],[255,255,255],
-    ],
+    colors: [[0,0,0],[255,255,255]],
   },
 
   pastel: {
@@ -102,26 +98,116 @@ export const PALETTES = {
       [255,255,255],[200,200,220],[100,100,120],[0,0,0],
     ],
   },
+
+  // ─── New Palettes ────────────────────────────────────────
+
+  pico8: {
+    name: 'PICO-8',
+    description: '16 colors',
+    icon: '🕹️',
+    colors: [
+      [0,0,0],[29,43,83],[126,37,83],[0,135,81],
+      [171,82,54],[95,87,79],[194,195,199],[255,241,232],
+      [255,0,77],[255,163,0],[255,236,39],[0,228,54],
+      [41,173,255],[131,118,156],[255,119,168],[255,204,170],
+    ],
+  },
+
+  endesga32: {
+    name: 'Endesga 32',
+    description: '32 colors',
+    icon: '🎯',
+    colors: [
+      [190,74,47],[215,118,67],[234,212,170],[228,166,114],
+      [184,111,80],[115,62,57],[62,39,49],[162,38,51],
+      [228,59,68],[247,118,34],[254,174,52],[254,231,97],
+      [99,199,77],[62,137,72],[38,92,66],[25,60,62],
+      [18,78,137],[0,153,219],[44,232,245],[255,255,255],
+      [192,203,220],[139,155,180],[90,105,136],[58,68,102],
+      [38,43,68],[24,20,37],[255,0,68],[104,56,108],
+      [181,80,136],[246,117,122],[232,183,150],[194,133,105],
+    ],
+  },
+
+  sweetie16: {
+    name: 'Sweetie 16',
+    description: '16 colors',
+    icon: '🍬',
+    colors: [
+      [26,28,44],[93,39,93],[177,62,83],[239,125,87],
+      [255,205,117],[167,240,112],[56,183,100],[37,113,121],
+      [41,54,111],[59,93,201],[65,166,246],[115,239,247],
+      [244,244,244],[148,176,194],[86,108,134],[51,60,87],
+    ],
+  },
+
+  vaporwave: {
+    name: 'Vaporwave',
+    description: 'Neon aesthetic',
+    icon: '🌴',
+    colors: [
+      [255,113,206],[1,205,254],[185,103,255],[5,255,161],
+      [255,151,255],[1,255,254],[254,1,154],[120,30,255],
+      [255,82,234],[57,255,220],[151,0,255],[0,0,50],
+    ],
+  },
+
+  custom: {
+    name: 'Custom',
+    description: 'Your colors',
+    colors: null,
+    icon: '✏️',
+  },
 };
 
-// Generate a 256-color SNES-style palette (6x6x6 color cube + extras)
 function generateSNESPalette() {
   const colors = [];
   const levels = [0, 51, 102, 153, 204, 255];
-  for (const r of levels) {
-    for (const g of levels) {
-      for (const b of levels) {
-        colors.push([r, g, b]);
-      }
-    }
-  }
-  // Fill remaining slots with grays
+  for (const r of levels) for (const g of levels) for (const b of levels) colors.push([r, g, b]);
   const grays = [8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240];
-  for (const g of grays) {
-    if (colors.length >= 256) break;
-    colors.push([g, g, g]);
-  }
+  for (const g of grays) { if (colors.length >= 256) break; colors.push([g, g, g]); }
   return colors.slice(0, 256);
 }
 
 export const PALETTE_KEYS = Object.keys(PALETTES);
+
+/**
+ * Parse hex color string to [r, g, b]
+ */
+export function parseHexColors(text) {
+  if (!text || !text.trim()) return null;
+  const colors = [];
+  const parts = text.split(',').map(s => s.trim()).filter(Boolean);
+  for (const part of parts) {
+    const hex = part.replace(/^#/, '');
+    if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+      colors.push([
+        parseInt(hex.slice(0, 2), 16),
+        parseInt(hex.slice(2, 4), 16),
+        parseInt(hex.slice(4, 6), 16),
+      ]);
+    } else if (/^[0-9a-fA-F]{3}$/.test(hex)) {
+      colors.push([
+        parseInt(hex[0] + hex[0], 16),
+        parseInt(hex[1] + hex[1], 16),
+        parseInt(hex[2] + hex[2], 16),
+      ]);
+    }
+  }
+  return colors.length > 0 ? colors : null;
+}
+
+/**
+ * Generate N random colors
+ */
+export function generateRandomPalette(n = 8) {
+  const colors = [];
+  for (let i = 0; i < n; i++) {
+    colors.push([
+      Math.floor(Math.random() * 256),
+      Math.floor(Math.random() * 256),
+      Math.floor(Math.random() * 256),
+    ]);
+  }
+  return colors;
+}
