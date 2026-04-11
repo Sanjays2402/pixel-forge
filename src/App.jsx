@@ -502,10 +502,13 @@ export default function App() {
   // ─── Load Image ────────────────────────────────────────
   const loadImage = useCallback(async (file) => {
     setProcessing(true);
-    // Convert HEIC/HEIF to JPEG for browser compatibility (iPhone photos)
     let processedFile = file;
-    const isHeic = file.type === 'image/heic' || file.type === 'image/heif'
-      || /\.(heic|heif)$/i.test(file.name);
+    const name = file.name.toLowerCase();
+    const type = file.type;
+
+    // ── HEIC/HEIF (iPhone) — convert to JPEG ──
+    const isHeic = type === 'image/heic' || type === 'image/heif'
+      || /\.(heic|heif)$/i.test(name);
     if (isHeic) {
       try {
         const { default: heic2any } = await import('heic2any');
@@ -521,9 +524,17 @@ export default function App() {
         return;
       }
     }
+
+    // ── WebP, AVIF, BMP, ICO, SVG, TIFF — browsers handle most natively via <img> ──
+    // If the browser can't decode it, img.onerror fires and we show a toast
+
     const reader = new FileReader();
     reader.onload = (e) => {
       const img = new Image();
+      img.onerror = () => {
+        setProcessing(false);
+        showToast('Unsupported format — try converting to PNG first');
+      };
       img.onload = () => {
         setImageName(file.name);
         setImageSize({ w: img.width, h: img.height });
@@ -849,9 +860,9 @@ export default function App() {
                 <div style={{ color: isDragging ? 'var(--accent)' : 'var(--text-tertiary)' }}><UploadIcon /></div>
                 <div className="text-center">
                   <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Drop an image here</p>
-                  <p className="text-xs mt-1.5" style={{ color: 'var(--text-tertiary)' }}>or click to browse · JPG, PNG, GIF, HEIC</p>
+                  <p className="text-xs mt-1.5" style={{ color: 'var(--text-tertiary)' }}>or click to browse · JPG, PNG, GIF, HEIC, WebP, AVIF, TIFF, BMP, SVG</p>
                 </div>
-                <input ref={fileInputRef} type="file" accept="image/*,.heic,.heif,image/heic,image/heif" className="hidden" onChange={handleFileSelect} />
+                <input ref={fileInputRef} type="file" accept="image/*,.heic,.heif,.tiff,.tif,.avif,.webp,.bmp,.ico" className="hidden" onChange={handleFileSelect} />
               </motion.div>
             ) : showComparison ? (
               <motion.div key="comparison" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
@@ -1054,7 +1065,7 @@ export default function App() {
                   style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--text-tertiary)' }}>
                   ⌨ Shortcuts (?)
                 </button>
-                <input ref={fileInputRef} type="file" accept="image/*,.heic,.heif,image/heic,image/heif" className="hidden" onChange={handleFileSelect} />
+                <input ref={fileInputRef} type="file" accept="image/*,.heic,.heif,.tiff,.tif,.avif,.webp,.bmp,.ico" className="hidden" onChange={handleFileSelect} />
               </div>
             )}
 
