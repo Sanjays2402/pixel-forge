@@ -94,7 +94,7 @@ function Slider({ label, value, onChange, min, max, step = 1, unit = '' }) {
 function Toggle({ label, icon, checked, onChange }) {
   return (
     <button onClick={() => onChange(!checked)}
-      className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[12px] font-medium transition-all duration-200 w-full cursor-pointer"
+      className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] font-medium transition-all duration-200 w-full cursor-pointer"
       style={{
         fontFamily: "'JetBrains Mono', monospace",
         background: checked ? 'var(--accent-dim)' : 'transparent',
@@ -135,7 +135,7 @@ function CollapsibleSection({ title, defaultOpen = true, children }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="flex flex-col gap-2" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-      <button onClick={() => setOpen(!open)} className="flex items-center justify-between cursor-pointer p-5 pb-2">
+      <button onClick={() => setOpen(!open)} className="flex items-center justify-between cursor-pointer px-4 py-3">
         <SectionLabel>{title}</SectionLabel>
         <ChevronIcon open={open} />
       </button>
@@ -143,7 +143,7 @@ function CollapsibleSection({ title, defaultOpen = true, children }) {
         {open && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}
-            className="overflow-hidden px-5 pb-5 flex flex-col gap-3">
+            className="overflow-hidden px-4 pb-4 flex flex-col gap-2.5">
             {children}
           </motion.div>
         )}
@@ -238,23 +238,23 @@ function PaletteSelector({ selected, onSelect, customText, onCustomTextChange, o
               return (
                 <div key={key}>
                   <button onClick={() => onSelect(key)}
-                    className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all duration-150 cursor-pointer text-left w-full"
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all duration-150 cursor-pointer text-left w-full"
                     style={{
                       background: isActive ? 'var(--accent-dim)' : 'transparent',
                       border: `1px solid ${isActive ? 'rgba(200,230,74,0.25)' : 'transparent'}`,
                     }}>
-                    <span className="text-base shrink-0 w-6 text-center">{p.icon}</span>
+                    <span className="text-sm shrink-0 w-5 text-center">{p.icon}</span>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[12px] font-semibold" style={{
+                      <div className="text-[11px] font-semibold" style={{
                         fontFamily: "'JetBrains Mono', monospace",
                         color: isActive ? 'var(--accent)' : 'var(--text-primary)',
                       }}>{p.name}</div>
-                      <div className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>{p.description}</div>
+                      <div className="text-[9px]" style={{ color: 'var(--text-tertiary)' }}>{p.description}</div>
                     </div>
                     {p.colors && (
                       <div className="flex gap-[3px] shrink-0">
-                        {p.colors.slice(0, 5).map((c, i) => (
-                          <div key={i} className="w-3 h-3 rounded-sm"
+                        {p.colors.slice(0, 6).map((c, i) => (
+                          <div key={i} className="w-2.5 h-2.5 rounded-sm"
                             style={{ background: `rgb(${c[0]},${c[1]},${c[2]})` }} />
                         ))}
                       </div>
@@ -771,13 +771,13 @@ export default function App() {
   return (
     <div className="h-full flex flex-col" style={{ background: 'var(--bg-primary)' }}>
       {/* ─── Header ─────────────────────────────────────── */}
-      <header className="flex items-center justify-between px-5 py-3 shrink-0"
+      <header className="flex items-center justify-between px-4 py-2 shrink-0"
         style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-        <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center text-sm"
+        <div className="flex items-center gap-2.5">
+          <div className="w-6 h-6 rounded-md flex items-center justify-center text-xs"
             style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>⚒</div>
-          <h1 className="text-sm font-semibold tracking-tight">PixelForge</h1>
-          <span className="text-[10px] px-2 py-0.5 rounded-full"
+          <h1 className="text-[13px] font-semibold tracking-tight">PixelForge</h1>
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full"
             style={{ background: 'var(--bg-tertiary)', color: 'var(--text-tertiary)', fontFamily: "'JetBrains Mono', monospace" }}>v2.0</span>
         </div>
         <div className="flex items-center gap-2">
@@ -914,7 +914,7 @@ export default function App() {
         {/* ─── Sidebar ──────────────────────────────────── */}
         {!fullscreen && (
           <motion.aside initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.1 }}
-            className="w-[300px] shrink-0 overflow-y-auto flex flex-col"
+            className="w-[280px] shrink-0 overflow-y-auto flex flex-col"
             style={{ background: 'var(--bg-secondary)', borderLeft: '1px solid var(--border-subtle)' }}>
 
             {/* Pixel Size */}
@@ -1058,27 +1058,26 @@ export default function App() {
 
       {/* ─── Footer ─────────────────────────────────────── */}
       {!fullscreen && (
-        <footer className="flex items-center justify-between px-5 py-2.5 shrink-0"
+        <footer className="flex items-center justify-between px-4 py-2 shrink-0"
           style={{ background: 'var(--bg-secondary)', borderTop: '1px solid var(--border-subtle)' }}>
-          <div className="flex items-center gap-5">
+          <div className="flex items-center gap-4">
             {image ? (
               <>
-                <span className="text-[11px] font-mono" style={{ color: 'var(--text-tertiary)' }}>{imageSize.w} × {imageSize.h}</span>
-                <span className="text-[11px] font-mono" style={{ color: 'var(--text-tertiary)' }}>
-                  {Math.ceil(imageSize.w / pixelSize)} × {Math.ceil(imageSize.h / pixelSize)} blocks
+                <span className="text-[10px] font-mono" style={{ color: 'var(--text-tertiary)' }}>{imageSize.w}×{imageSize.h}</span>
+                <span className="text-[10px] font-mono" style={{ color: 'var(--text-tertiary)' }}>
+                  {Math.ceil(imageSize.w / pixelSize)}×{Math.ceil(imageSize.h / pixelSize)} blocks
                 </span>
-                <span className="text-[11px] font-mono" style={{ color: 'var(--text-tertiary)' }}>{pixelCount.toLocaleString()} px</span>
-                <span className="text-[11px] font-mono" style={{ color: 'var(--accent)' }}>{colorCount} colors</span>
-                <span className="text-[11px] font-mono" style={{ color: 'var(--text-tertiary)' }}>{renderTime}ms</span>
+                <span className="text-[10px] font-mono" style={{ color: 'var(--accent)' }}>{colorCount} colors</span>
+                <span className="text-[10px] font-mono" style={{ color: 'var(--text-tertiary)' }}>{renderTime}ms</span>
               </>
             ) : (
-              <span className="text-[11px] font-mono" style={{ color: 'var(--text-tertiary)' }}>No image loaded</span>
+              <span className="text-[10px] font-mono" style={{ color: 'var(--text-tertiary)' }}>No image loaded</span>
             )}
           </div>
           <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleExport} disabled={!image}
-            className="flex items-center gap-2 px-5 py-2 rounded-lg text-[12px] font-semibold transition-all disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[11px] font-semibold transition-all disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer"
             style={{ fontFamily: "'JetBrains Mono', monospace", background: image ? 'var(--accent)' : 'var(--bg-tertiary)', color: image ? 'var(--bg-primary)' : 'var(--text-tertiary)' }}>
-            <DownloadIcon /> Export PNG
+            <DownloadIcon /> Export
           </motion.button>
         </footer>
       )}
