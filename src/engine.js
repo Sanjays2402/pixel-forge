@@ -161,6 +161,52 @@ function applyPosterize(data, levels) {
   return result;
 }
 
+// ─── Edge Detection / Outline ───────────────────────────
+
+function applyOutline(data, cols, rows, threshold, color = [0, 0, 0]) {
+  // Sobel edge detection on luminance
+  const lum = new Float32Array(cols * rows);
+  for (let i = 0; i < cols * rows; i++) {
+    lum[i] = 0.299 * data[i * 3] + 0.587 * data[i * 3 + 1] + 0.114 * data[i * 3 + 2];
+  }
+  const out = new Float32Array(data.length);
+  for (let i = 0; i < data.length; i++) out[i] = data[i];
+  for (let y = 1; y < rows - 1; y++) {
+    for (let x = 1; x < cols - 1; x++) {
+      const gx =
+        -lum[(y - 1) * cols + (x - 1)] + lum[(y - 1) * cols + (x + 1)] +
+        -2 * lum[y * cols + (x - 1)] + 2 * lum[y * cols + (x + 1)] +
+        -lum[(y + 1) * cols + (x - 1)] + lum[(y + 1) * cols + (x + 1)];
+      const gy =
+        -lum[(y - 1) * cols + (x - 1)] - 2 * lum[(y - 1) * cols + x] - lum[(y - 1) * cols + (x + 1)] +
+        lum[(y + 1) * cols + (x - 1)] + 2 * lum[(y + 1) * cols + x] + lum[(y + 1) * cols + (x + 1)];
+      const mag = Math.sqrt(gx * gx + gy * gy);
+      if (mag > threshold) {
+        const i = (y * cols + x) * 3;
+        out[i] = color[0]; out[i + 1] = color[1]; out[i + 2] = color[2];
+      }
+    }
+  }
+  return out;
+}
+
+// ─── Dithering Matrices ──────────────────────────────────
+
+// 8x8 Bayer matrix (normalized 0..1, then centered around 0)
+const BAYER_8 = (() => {
+  const m = [
+    0, 32, 8, 40, 2, 34, 10, 42,
+    48, 16, 56, 24, 50, 18, 58, 26,
+    12, 44, 4, 36, 14, 46, 6, 38,
+    60, 28, 52, 20, 62, 30, 54, 22,
+    3, 35, 11, 43, 1, 33, 9, 41,
+    51, 19, 59, 27, 49, 17, 57, 25,
+    15, 47, 7, 39, 13, 45, 5, 37,
+    63, 31, 55, 23, 61, 29, 53, 21,
+  ];
+  return m.map((v) => (v / 64 - 0.5) * 64); // strength ~±32
+})();
+
 // ─── Main Processing ───────────────────────────────────────
 
 export function processImage({
@@ -168,6 +214,7 @@ export function processImage({
   sharpen = 0, blur = 0, hueRotation = 0, saturation = 0,
   invert = false, sepia = false, grayscale = false, posterize = 256,
   pixelShape = 'square', bgColor = null,
+  outline = 0, outlineColor = [0, 0, 0],
 }) {
   const sw = sourceCanvas.width;
   const sh = sourceCanvas.height;
@@ -213,10 +260,12 @@ export function processImage({
   if (sepia) downsampled = applySepia(downsampled, cols, rows);
   if (invert) downsampled = applyInvert(downsampled);
   if (posterize < 256) downsampled = applyPosterize(downsampled, posterize);
+  if (outline > 0) downsampled = applyOutline(downsampled, cols, rows, outline, outlineColor);
 
-  // 4. Quantize
+  // 4. Quantize (supports: 'none'|false, 'floyd'|true, 'atkinson', 'bayer')
+  const ditherMode = dithering === true ? 'floyd' : (dithering || 'none');
   const output = new Uint8ClampedArray(cols * rows * 3);
-  if (palette && dithering) {
+  if (palette && ditherMode === 'floyd') {
     const errors = new Float32Array(downsampled.length);
     for (let i = 0; i < downsampled.length; i++) errors[i] = downsampled[i];
     for (let row = 0; row < rows; row++) {
@@ -238,6 +287,40 @@ export function processImage({
         dist(col - 1, row + 1, 3 / 16);
         dist(col, row + 1, 5 / 16);
         dist(col + 1, row + 1, 1 / 16);
+      }
+    }
+  } else if (palette && ditherMode === 'atkinson') {
+    const errors = new Float32Array(downsampled.length);
+    for (let i = 0; i < downsampled.length; i++) errors[i] = downsampled[i];
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const di = (row * cols + col) * 3;
+        const oR = Math.max(0, Math.min(255, errors[di]));
+        const oG = Math.max(0, Math.min(255, errors[di + 1]));
+        const oB = Math.max(0, Math.min(255, errors[di + 2]));
+        const [nR, nG, nB] = findNearestColor(oR, oG, oB, palette);
+        output[di] = nR; output[di + 1] = nG; output[di + 2] = nB;
+        const eR = (oR - nR) / 8, eG = (oG - nG) / 8, eB = (oB - nB) / 8;
+        const offsets = [[1, 0], [2, 0], [-1, 1], [0, 1], [1, 1], [0, 2]];
+        for (const [dx, dy] of offsets) {
+          const c = col + dx, r = row + dy;
+          if (c >= 0 && c < cols && r >= 0 && r < rows) {
+            const i = (r * cols + c) * 3;
+            errors[i] += eR; errors[i + 1] += eG; errors[i + 2] += eB;
+          }
+        }
+      }
+    }
+  } else if (palette && ditherMode === 'bayer') {
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const di = (row * cols + col) * 3;
+        const threshold = BAYER_8[(row & 7) * 8 + (col & 7)];
+        const oR = Math.max(0, Math.min(255, downsampled[di] + threshold));
+        const oG = Math.max(0, Math.min(255, downsampled[di + 1] + threshold));
+        const oB = Math.max(0, Math.min(255, downsampled[di + 2] + threshold));
+        const [nR, nG, nB] = findNearestColor(oR, oG, oB, palette);
+        output[di] = nR; output[di + 1] = nG; output[di + 2] = nB;
       }
     }
   } else if (palette) {
@@ -346,4 +429,82 @@ export function createScaledCanvas(outputCanvas, scale) {
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(outputCanvas, 0, 0, c.width, c.height);
   return c;
+}
+
+// ─── Palette Extraction (k-means on downsampled image) ─────
+export function extractPalette(sourceCanvas, k = 16, maxSamples = 4000) {
+  const ctx = sourceCanvas.getContext('2d', { willReadFrequently: true });
+  const { width: w, height: h } = sourceCanvas;
+  const data = ctx.getImageData(0, 0, w, h).data;
+
+  // Random sample of pixels
+  const samples = [];
+  const stride = Math.max(1, Math.floor((w * h) / maxSamples));
+  for (let i = 0; i < w * h; i += stride) {
+    const p = i * 4;
+    samples.push([data[p], data[p + 1], data[p + 2]]);
+  }
+  if (samples.length === 0) return [[0, 0, 0]];
+
+  // k-means init: spaced samples
+  const centroids = [];
+  const step = Math.max(1, Math.floor(samples.length / k));
+  for (let i = 0; i < k; i++) centroids.push([...samples[(i * step) % samples.length]]);
+
+  const labels = new Int32Array(samples.length);
+  for (let iter = 0; iter < 10; iter++) {
+    // Assign
+    for (let s = 0; s < samples.length; s++) {
+      let best = 0, bestD = Infinity;
+      for (let c = 0; c < centroids.length; c++) {
+        const d = (samples[s][0] - centroids[c][0]) ** 2 +
+                  (samples[s][1] - centroids[c][1]) ** 2 +
+                  (samples[s][2] - centroids[c][2]) ** 2;
+        if (d < bestD) { bestD = d; best = c; }
+      }
+      labels[s] = best;
+    }
+    // Update
+    const sums = Array.from({ length: centroids.length }, () => [0, 0, 0, 0]);
+    for (let s = 0; s < samples.length; s++) {
+      const l = labels[s];
+      sums[l][0] += samples[s][0];
+      sums[l][1] += samples[s][1];
+      sums[l][2] += samples[s][2];
+      sums[l][3]++;
+    }
+    for (let c = 0; c < centroids.length; c++) {
+      if (sums[c][3] > 0) {
+        centroids[c] = [
+          Math.round(sums[c][0] / sums[c][3]),
+          Math.round(sums[c][1] / sums[c][3]),
+          Math.round(sums[c][2] / sums[c][3]),
+        ];
+      }
+    }
+  }
+
+  // Sort by brightness for a nice ramp
+  centroids.sort((a, b) => (a[0] + a[1] + a[2]) - (b[0] + b[1] + b[2]));
+  return centroids;
+}
+
+// ─── Animated GIF Export (using gif.js via dynamic import) ─
+export async function exportAnimatedGIF(frames, fps = 12) {
+  // frames: array of canvas (already sized)
+  if (frames.length === 0) return null;
+  const w = frames[0].width, h = frames[0].height;
+  // Use browser's HTMLCanvasElement → blob
+  // Simple APNG-ish fallback: return first frame as PNG blob.
+  // For true GIF we dynamic-import gif.js (added as dep).
+  const { default: GIF } = await import('gif.js');
+  return new Promise((resolve) => {
+    const gif = new GIF({
+      workers: 2, quality: 10, width: w, height: h,
+      workerScript: new URL('gif.js/dist/gif.worker.js', import.meta.url).toString(),
+    });
+    for (const frame of frames) gif.addFrame(frame, { delay: Math.round(1000 / fps) });
+    gif.on('finished', (blob) => resolve(blob));
+    gif.render();
+  });
 }
