@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PALETTES, PALETTE_KEYS, parseHexColors, generateRandomPalette } from './palettes';
-import { processImage, drawGrid, countUniqueColors, computeHistogram, exportSVG, createScaledCanvas } from './engine';
+import { processImage, drawGrid, countUniqueColors, computeHistogram, exportSVG, createScaledCanvas, extractPalette, exportAnimatedGIF } from './engine';
 
 // ─── Icons ─────────────────────────────────────────────────
 const UploadIcon = ({ size = 48 }) => (
@@ -389,10 +389,11 @@ function PresetModal({ onClose, onLoad, presets, currentSettings, onSave, onDele
 
 // ─── Main App ──────────────────────────────────────────────
 const DEFAULT_STATE = {
-  pixelSize: 8, paletteKey: 'original', dithering: false, brightness: 0, contrast: 0,
+  pixelSize: 8, paletteKey: 'original', dithering: 'none', brightness: 0, contrast: 0,
   showGrid: false, sharpen: 0, blur: 0, hueRotation: 0, saturation: 0,
   invertColors: false, sepia: false, grayscale: false, posterize: 256,
   pixelShape: 'square', exportScale: 1, bgColor: '#0a0a0f', customPaletteText: '',
+  outline: 0,
 };
 
 export default function App() {
@@ -442,7 +443,7 @@ export default function App() {
   const {
     pixelSize, paletteKey, dithering, brightness, contrast, showGrid,
     sharpen, blur, hueRotation, saturation, invertColors, sepia, grayscale, posterize,
-    pixelShape, exportScale, bgColor, customPaletteText,
+    pixelShape, exportScale, bgColor, customPaletteText, outline,
   } = settings;
 
   const set = useCallback((key, val) => setSettings((s) => ({ ...s, [key]: val })), [setSettings]);
@@ -606,6 +607,7 @@ export default function App() {
       sharpen, blur, hueRotation, saturation,
       invert: invertColors, sepia, grayscale, posterize,
       pixelShape, bgColor: (pixelShape !== 'square') ? bgColorRgb : null,
+      outline,
     });
     ctx.putImageData(imageData, 0, 0);
     if (showGrid && pixelSize > 2) drawGrid(ctx, outCanvas.width, outCanvas.height, pixelSize);
@@ -625,7 +627,7 @@ export default function App() {
   }, [
     image, pixelSize, paletteKey, dithering, brightness, contrast, showGrid,
     sharpen, blur, hueRotation, saturation, invertColors, sepia, grayscale, posterize,
-    pixelShape, customColors, bgColorRgb, showComparison,
+    pixelShape, customColors, bgColorRgb, showComparison, outline,
   ]);
 
   useEffect(() => {
@@ -707,6 +709,53 @@ export default function App() {
     setSettings((s) => ({ ...s, paletteKey: 'custom', customPaletteText: hex }));
     showToast('Random palette generated!');
   }, [setSettings, showToast]);
+
+  // ─── Extract Palette from Image (k-means) ──────────────
+  const handleExtractPalette = useCallback(() => {
+    if (!sourceCanvasRef.current || !image) return;
+    const colors = extractPalette(sourceCanvasRef.current, 16);
+    const hex = colors.map((c) => '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('')).join(', ');
+    setSettings((s) => ({ ...s, paletteKey: 'custom', customPaletteText: hex }));
+    showToast(`Extracted ${colors.length} colors from image`);
+  }, [image, setSettings, showToast]);
+
+  // ─── Animated GIF Export (cycles through palettes) ─────
+  const handleExportGIF = useCallback(async () => {
+    if (!outputCanvasRef.current || !sourceCanvasRef.current || !image) return;
+    showToast('Rendering GIF…');
+    const frames = [];
+    const keys = ['nes', 'gameboy', 'cga', 'pico8', 'sweetie16', 'nostalgia', 'endesga32'].filter((k) => PALETTES[k]?.colors);
+    for (const key of keys) {
+      const pal = PALETTES[key].colors;
+      const { imageData } = processImage({
+        sourceCanvas: sourceCanvasRef.current, pixelSize, palette: pal, dithering, brightness, contrast,
+        sharpen, blur, hueRotation, saturation,
+        invert: invertColors, sepia, grayscale, posterize, pixelShape,
+        bgColor: (pixelShape !== 'square') ? bgColorRgb : null,
+        outline,
+      });
+      const c = document.createElement('canvas');
+      c.width = imageData.width; c.height = imageData.height;
+      c.getContext('2d').putImageData(imageData, 0, 0);
+      frames.push(c);
+    }
+    try {
+      const blob = await exportAnimatedGIF(frames, 2);
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        const name = imageName ? imageName.replace(/\.[^.]+$/, '') : 'pixelforge';
+        link.download = `${name}_palette-cycle.gif`;
+        link.href = url;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+        showToast('GIF exported!');
+      }
+    } catch (e) {
+      console.error(e);
+      showToast('GIF export failed — check console');
+    }
+  }, [image, pixelSize, dithering, brightness, contrast, sharpen, blur, hueRotation, saturation, invertColors, sepia, grayscale, posterize, pixelShape, bgColorRgb, outline, imageName, showToast]);
 
   // ─── Zoom via Wheel ────────────────────────────────────
   const handleWheel = useCallback((e) => {
@@ -962,13 +1011,21 @@ export default function App() {
             {/* Options */}
             <div className="p-5 flex flex-col gap-2.5" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <SectionLabel>Options</SectionLabel>
-              <Toggle label="Dithering" icon={<DitheringIcon />} checked={dithering} onChange={(v) => set('dithering', v)} />
+              <MiniSelect label="Dithering" value={typeof dithering === 'boolean' ? (dithering ? 'floyd' : 'none') : dithering}
+                onChange={(v) => set('dithering', v)}
+                options={[
+                  { value: 'none', label: 'None' },
+                  { value: 'floyd', label: 'Floyd–Steinberg' },
+                  { value: 'atkinson', label: 'Atkinson' },
+                  { value: 'bayer', label: 'Bayer 8×8' },
+                ]} />
               <Toggle label="Grid Overlay" icon={<GridIcon />} checked={showGrid} onChange={(v) => set('showGrid', v)} />
               <Toggle label="Invert Colors" icon={<span style={{ fontSize: 14 }}>◑</span>} checked={invertColors} onChange={(v) => set('invertColors', v)} />
               <Toggle label="Sepia" icon={<span style={{ fontSize: 14 }}>🤎</span>} checked={sepia} onChange={(v) => set('sepia', v)} />
               <Toggle label="Grayscale" icon={<span style={{ fontSize: 14 }}>⬜</span>} checked={grayscale} onChange={(v) => set('grayscale', v)} />
               <Toggle label="Comparison" icon={<span style={{ fontSize: 14 }}>⇔</span>}
                 checked={showComparison} onChange={(v) => setShowComparison(v)} />
+              <Slider label="Outline Edges" value={outline} onChange={(v) => set('outline', v)} min={0} max={200} />
             </div>
 
             {/* Adjustments */}
@@ -1029,6 +1086,20 @@ export default function App() {
                   className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-[11px] font-medium transition-all cursor-pointer disabled:opacity-30"
                   style={{ fontFamily: "'JetBrains Mono', monospace", background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
                   <DownloadIcon /> SVG
+                </button>
+              </div>
+              <div className="flex gap-2 mt-2">
+                <button onClick={handleExtractPalette} disabled={!image}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-[11px] font-medium transition-all cursor-pointer disabled:opacity-30"
+                  style={{ fontFamily: "'JetBrains Mono', monospace", background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}
+                  title="Extract dominant colors as palette (k-means)">
+                  🎨 Extract Palette
+                </button>
+                <button onClick={handleExportGIF} disabled={!image}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-[11px] font-medium transition-all cursor-pointer disabled:opacity-30"
+                  style={{ fontFamily: "'JetBrains Mono', monospace", background: 'linear-gradient(135deg, rgba(168,85,247,0.22), rgba(236,72,153,0.16))', color: '#f3e8ff', border: '1px solid rgba(168,85,247,0.4)' }}
+                  title="Animated GIF cycling through palettes">
+                  🎬 GIF
                 </button>
               </div>
             </CollapsibleSection>
